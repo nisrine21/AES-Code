@@ -143,7 +143,7 @@ def aes_encrypt_file(input_file, output_file, key):
     with open(output_file, 'w') as f:
         f.write(ciphertext.hex())  # Writing as hex string
 
-# Function to encrypt all .txt files in a directory
+# Function to encrypt all .txt files in a directory, excluding already encrypted files
 def encrypt_files_in_directory(input_path, output_path, key):
     # Create output directory if it doesn't exist
     if not os.path.exists(output_path):
@@ -151,21 +151,29 @@ def encrypt_files_in_directory(input_path, output_path, key):
 
     # List all .txt files in the input directory
     for filename in os.listdir(input_path):
-        if filename.endswith('.txt'):
+        # Skip files that end with '_E.txt' to avoid re-encryption
+        if filename.endswith('.txt') and not filename.endswith('_E.txt'):
             input_file = os.path.join(input_path, filename)
             output_file = os.path.join(output_path, filename[:-4] + '_E.txt')
+
+            # Check if the encrypted file already exists to prevent overwriting
+            if os.path.exists(output_file):
+                print(f"Encrypted file already exists for {filename}, skipping encryption.")
+                continue
 
             # Encrypt each file
             aes_encrypt_file(input_file, output_file, key)
             print(f'File {filename} encrypted and saved as {output_file}')
+        else:
+            print(f"Skipping file {filename} (either not a .txt file or already encrypted).")
 
 if __name__ == "__main__":
-    # Prompt user for input and output directory paths
-    input_path = input("Enter the directory path containing .txt files to encrypt: ")
-    output_path = input("Enter the directory path to save encrypted files: ")
+    # Define your input and output directories
+    input_path = "C:\\Users\\xapa\\Documents\\test"
+    output_path = "C:\\Users\\xapa\\Documents\\test\\enc"
 
-    # Prompt user for AES key (16 bytes for AES-128)
-    key_input = input("Enter an AES key (16 bytes): ")
+    # Define your AES key (16 bytes for AES-128)
+    key_input = "qwertyuiopqwerty"
     key = key_input.encode('utf-8')
 
     # Validate key length
