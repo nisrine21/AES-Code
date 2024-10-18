@@ -20,7 +20,7 @@ INV_S_BOX = [
     [0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d]
 ]
 
-# S-box used for SubBytes
+# S-box used for SubBytes (same as in encryption)
 S_BOX = [
     [0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76],
     [0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0],
@@ -40,15 +40,22 @@ S_BOX = [
     [0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16]
 ]
 
-# Rcon used for Key Expansion
+# Rcon used for Key Expansion (same as in encryption)
 RCON = [
-    [0x01, 0x00, 0x00, 0x00], [0x02, 0x00, 0x00, 0x00], [0x04, 0x00, 0x00, 0x00], [0x08, 0x00, 0x00, 0x00],
-    [0x10, 0x00, 0x00, 0x00], [0x20, 0x00, 0x00, 0x00], [0x40, 0x00, 0x00, 0x00], [0x80, 0x00, 0x00, 0x00],
-    [0x1b, 0x00, 0x00, 0x00], [0x36, 0x00, 0x00, 0x00]
+    [0x01, 0x00, 0x00, 0x00],
+    [0x02, 0x00, 0x00, 0x00],
+    [0x04, 0x00, 0x00, 0x00],
+    [0x08, 0x00, 0x00, 0x00],
+    [0x10, 0x00, 0x00, 0x00],
+    [0x20, 0x00, 0x00, 0x00],
+    [0x40, 0x00, 0x00, 0x00],
+    [0x80, 0x00, 0x00, 0x00],
+    [0x1b, 0x00, 0x00, 0x00],
+    [0x36, 0x00, 0x00, 0x00]
 ]
 
 def gmul(a, b):
-    """Galois Field (256) Multiplication of two Bytes"""
+    """Galois Field (256) Multiplication of two Bytes."""
     p = 0
     for _ in range(8):
         if b & 1:
@@ -61,103 +68,98 @@ def gmul(a, b):
     return p
 
 def inv_shift_rows(state):
-    state[1] = state[1][-1:] + state[1][:-1]  # Right rotate 1
-    state[2] = state[2][-2:] + state[2][:-2]  # Right rotate 2
-    state[3] = state[3][-3:] + state[3][:-3]  # Right rotate 3
+    """Perform the Inverse ShiftRows transformation."""
+    state[1] = state[1][-1:] + state[1][:-1]  # Right rotate by 1
+    state[2] = state[2][-2:] + state[2][:-2]  # Right rotate by 2
+    state[3] = state[3][-3:] + state[3][:-3]  # Right rotate by 3
     return state
 
 def inv_sub_bytes(state):
+    """Apply the inverse S-box substitution to the state."""
     for i in range(4):
         for j in range(4):
-            state[i][j] = INV_S_BOX[(state[i][j] >> 4) & 0x0f][state[i][j] & 0x0f]
+            byte = state[i][j]
+            state[i][j] = INV_S_BOX[byte >> 4][byte & 0x0F]
     return state
 
 def inv_mix_single_column(column):
-    """Mix one column for InvMixColumns."""
-    return [
-        gmul(column[0], 0x0e) ^ gmul(column[1], 0x0b) ^ gmul(column[2], 0x0d) ^ gmul(column[3], 0x09),
-        gmul(column[0], 0x09) ^ gmul(column[1], 0x0e) ^ gmul(column[2], 0x0b) ^ gmul(column[3], 0x0d),
-        gmul(column[0], 0x0d) ^ gmul(column[1], 0x09) ^ gmul(column[2], 0x0e) ^ gmul(column[3], 0x0b),
-        gmul(column[0], 0x0b) ^ gmul(column[1], 0x0d) ^ gmul(column[2], 0x09) ^ gmul(column[3], 0x0e),
-    ]
+    """Mix one column for the Inverse MixColumns transformation."""
+    temp = column.copy()
+    column[0] = gmul(temp[0], 0x0e) ^ gmul(temp[1], 0x0b) ^ gmul(temp[2], 0x0d) ^ gmul(temp[3], 0x09)
+    column[1] = gmul(temp[0], 0x09) ^ gmul(temp[1], 0x0e) ^ gmul(temp[2], 0x0b) ^ gmul(temp[3], 0x0d)
+    column[2] = gmul(temp[0], 0x0d) ^ gmul(temp[1], 0x09) ^ gmul(temp[2], 0x0e) ^ gmul(temp[3], 0x0b)
+    column[3] = gmul(temp[0], 0x0b) ^ gmul(temp[1], 0x0d) ^ gmul(temp[2], 0x09) ^ gmul(temp[3], 0x0e)
+    return column
 
 def inv_mix_columns(state):
+    """Perform the Inverse MixColumns transformation."""
     for i in range(4):
-        state[i] = inv_mix_single_column(state[i])
-    return state
-
-def inv_shift_rows(state):
-    state[1] = state[1][-1:] + state[1][:-1]  # Right rotate 1
-    state[2] = state[2][-2:] + state[2][:-2]  # Right rotate 2
-    state[3] = state[3][-3:] + state[3][:-3]  # Right rotate 3
-    return state
-
-def inv_sub_bytes(state):
-    for i in range(4):
+        column = [state[0][i], state[1][i], state[2][i], state[3][i]]
+        mixed_column = inv_mix_single_column(column)
         for j in range(4):
-            state[i][j] = INV_S_BOX[(state[i][j] >> 4) & 0x0f][state[i][j] & 0x0f]
+            state[j][i] = mixed_column[j]
     return state
-
-def sub_word(word):
-    return [S_BOX[(byte >> 4) & 0x0F][byte & 0x0F] for byte in word]
 
 def rot_word(word):
+    """Rotate a word (4 bytes) left by one byte."""
     return word[1:] + word[:1]
 
+def sub_word(word):
+    """Apply the S-box substitution to a word (4 bytes)."""
+    return [S_BOX[byte >> 4][byte & 0x0F] for byte in word]
+
 def key_expansion(key):
-    key_schedule = [[key[i * 4 + j] for j in range(4)] for i in range(4)]
+    """Expand the cipher key into the key schedule."""
+    key_symbols = [k for k in key]
+    key_schedule = []
+    for i in range(4):
+        key_schedule.append(key_symbols[4*i:4*(i+1)])
 
     for i in range(4, 44):
-        temp = key_schedule[i - 1].copy()
+        temp = key_schedule[i - 1][:]
         if i % 4 == 0:
             temp = sub_word(rot_word(temp))
             temp[0] ^= RCON[i // 4 - 1][0]
-        key_schedule.append([key_schedule[i - 4][j] ^ temp[j] for j in range(4)])
-
+        word = [key_schedule[i - 4][j] ^ temp[j] for j in range(4)]
+        key_schedule.append(word)
     return key_schedule
 
 def add_round_key(state, key_schedule, round_key_index):
+    """Add the round key to the state."""
     for i in range(4):
         for j in range(4):
-            state[i][j] ^= key_schedule[round_key_index + i][j]
+            state[i][j] ^= key_schedule[round_key_index + j][i]
     return state
 
 def aes_decrypt(ciphertext, key):
-    state = [list(ciphertext[i:i + 4]) for i in range(0, 16, 4)]
+    """Decrypt a single block of ciphertext using AES."""
+    state = [[ciphertext[4 * i + j] for j in range(4)] for i in range(4)]
     key_schedule = key_expansion(key)
 
-    # Initial AddRoundKey
     state = add_round_key(state, key_schedule, 40)
-    #print(f"After AddRoundKey (Final Round): {state}")
 
-    # Final Round (without InvMixColumns)
-    state = inv_shift_rows(state)
-    #print(f"After InvShiftRows: {state}")
-    state = inv_sub_bytes(state)
-    #print(f"After InvSubBytes: {state}")
-
-    # Rounds 9 to 1
-    for i in range(9, 0, -1):
-        state = add_round_key(state, key_schedule, i * 4)
-        #print(f"After AddRoundKey (Round {i}): {state}")
-        state = inv_mix_columns(state)
-        #print(f"After InvMixColumns (Round {i}): {state}")
+    for round in range(9, 0, -1):
         state = inv_shift_rows(state)
-        #print(f"After InvShiftRows (Round {i}): {state}")
         state = inv_sub_bytes(state)
-        #print(f"After InvSubBytes (Round {i}): {state}")
+        state = add_round_key(state, key_schedule, round * 4)
+        state = inv_mix_columns(state)
 
-    # Initial Round
+    state = inv_shift_rows(state)
+    state = inv_sub_bytes(state)
     state = add_round_key(state, key_schedule, 0)
-    #print(f"After AddRoundKey (Initial Round): {state}")
 
-    # Convert state to bytes
-    return bytes([state[i][j] for i in range(4) for j in range(4)])
+    plaintext = bytearray(16)
+    for i in range(4):
+        for j in range(4):
+            plaintext[4 * i + j] = state[i][j]
+    return bytes(plaintext)
 
 def aes_decrypt_file(input_file, output_file, key):
-    with open(input_file, 'r') as f:
-        ciphertext = bytes.fromhex(f.read())
+    """Decrypt a file using AES decryption."""
+    with open(input_file, 'rb') as f:
+        ciphertext = f.read()
 
+    # Decryption
     plaintext = b''
     for i in range(0, len(ciphertext), 16):
         block = ciphertext[i:i + 16]
@@ -166,38 +168,58 @@ def aes_decrypt_file(input_file, output_file, key):
         decrypted_block = aes_decrypt(block, key)
         plaintext += decrypted_block
 
-    # Remove padding
+    # Remove padding (PKCS#7)
     padding_len = plaintext[-1]
-    print(f"Padding length: {padding_len}")
-    print(f"Last {padding_len} bytes: {plaintext[-padding_len:]}")
-
     if 1 <= padding_len <= 16 and plaintext[-padding_len:] == bytes([padding_len]) * padding_len:
         plaintext = plaintext[:-padding_len]
     else:
-        raise ValueError("Invalid padding length detected or incorrect padding.")
+        raise ValueError("Invalid padding detected or incorrect decryption key.")
 
+    # Write plaintext in binary mode
     with open(output_file, 'wb') as f:
         f.write(plaintext)
 
 def decrypt_files_in_directory(input_path, output_path, key):
+    """Decrypt files with specified extensions in a directory."""
+    # Create output directory if it doesn't exist
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    for filename in os.listdir(input_path):
-        if filename.endswith('_E.txt'):
-            input_file = os.path.join(input_path, filename)
-            output_file = os.path.join(output_path, filename[:-6] + '_D.txt')
+    # Define the file extensions to decrypt
+    file_extensions = ['.txt', '.jpg', '.jpeg', '.png', '.pdf']
 
-            aes_decrypt_file(input_file, output_file, key)
-            print(f'File {filename} decrypted and saved as {output_file}')
+    # List all files in the input directory
+    for filename in os.listdir(input_path):
+        # Get file extension
+        file_ext = os.path.splitext(filename)[1].lower()
+        # Check if the file has one of the specified extensions and ends with '_E' before the extension
+        if file_ext in file_extensions and filename.endswith('_E' + file_ext):
+            input_file = os.path.join(input_path, filename)
+            output_file = os.path.join(output_path, filename[:-len(file_ext) - 2] + '_D' + file_ext)
+
+            # Check if the decrypted file already exists to prevent overwriting
+            if os.path.exists(output_file):
+                print(f"Decrypted file already exists for {filename}, skipping decryption.")
+                continue
+
+            # Decrypt each file
+            try:
+                aes_decrypt_file(input_file, output_file, key)
+                print(f'File {filename} decrypted and saved as {output_file}')
+            except ValueError as e:
+                print(f'Error decrypting {filename}: {e}')
 
 if __name__ == "__main__":
-    input_path = input("Enter the directory path containing encrypted files: ")
-    output_path = input("Enter the directory path to save decrypted files: ")
-    key_input = input("Enter the AES key (16 bytes): ")
+    # Define your input and output directories
+    input_path = "C:\\Users\\xapa\\Documents\\test\\enc"
+    output_path = "C:\\Users\\xapa\\Documents\\test\\dec"
 
-    if len(key_input) != 16:
-        print("The key must be exactly 16 bytes.")
+    # Define your AES key (must be the same as used for encryption)
+    key_input = "qwertyuiopqwerty"
+    key = key_input.encode('utf-8')
+
+    # Validate key length
+    if len(key) != 16:
+        print("The key must be exactly 16 bytes long.")
     else:
-        key = key_input.encode('utf-8')
         decrypt_files_in_directory(input_path, output_path, key)

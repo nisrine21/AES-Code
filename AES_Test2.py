@@ -22,13 +22,20 @@ S_BOX = [
 
 # Rcon used for KeyExpansion
 RCON = [
-    [0x01, 0x00, 0x00, 0x00], [0x02, 0x00, 0x00, 0x00], [0x04, 0x00, 0x00, 0x00], [0x08, 0x00, 0x00, 0x00],
-    [0x10, 0x00, 0x00, 0x00], [0x20, 0x00, 0x00, 0x00], [0x40, 0x00, 0x00, 0x00], [0x80, 0x00, 0x00, 0x00],
-    [0x1b, 0x00, 0x00, 0x00], [0x36, 0x00, 0x00, 0x00]
+    [0x01, 0x00, 0x00, 0x00],
+    [0x02, 0x00, 0x00, 0x00],
+    [0x04, 0x00, 0x00, 0x00],
+    [0x08, 0x00, 0x00, 0x00],
+    [0x10, 0x00, 0x00, 0x00],
+    [0x20, 0x00, 0x00, 0x00],
+    [0x40, 0x00, 0x00, 0x00],
+    [0x80, 0x00, 0x00, 0x00],
+    [0x1b, 0x00, 0x00, 0x00],
+    [0x36, 0x00, 0x00, 0x00]
 ]
 
 def gmul(a, b):
-    """Galois Field (256) Multiplication of two Bytes"""
+    """Galois Field (256) Multiplication of two Bytes."""
     p = 0
     for _ in range(8):
         if b & 1:
@@ -40,88 +47,95 @@ def gmul(a, b):
         b >>= 1
     return p
 
-# Function that applies SubBytes (S-box substitution)
 def sub_bytes(state):
+    """Apply the S-box substitution to the state."""
     for i in range(4):
         for j in range(4):
-            state[i][j] = S_BOX[(state[i][j] >> 4) & 0x0f][state[i][j] & 0x0f]
+            byte = state[i][j]
+            state[i][j] = S_BOX[byte >> 4][byte & 0x0F]
     return state
 
-# Function that applies ShiftRows (row rotation)
 def shift_rows(state):
-    state[1] = state[1][1:] + state[1][:1]  # Left rotate 1
-    state[2] = state[2][2:] + state[2][:2]  # Left rotate 2
-    state[3] = state[3][3:] + state[3][:3]  # Left rotate 3
+    """Perform the ShiftRows transformation."""
+    state[1] = state[1][1:] + state[1][:1]  # Left rotate by 1
+    state[2] = state[2][2:] + state[2][:2]  # Left rotate by 2
+    state[3] = state[3][3:] + state[3][:3]  # Left rotate by 3
     return state
 
-# Correct MixColumns function using Galois Field multiplication
 def mix_single_column(column):
-    """Mix one column for MixColumns."""
-    return [
-        gmul(column[0], 2) ^ gmul(column[1], 3) ^ column[2] ^ column[3],
-        column[0] ^ gmul(column[1], 2) ^ gmul(column[2], 3) ^ column[3],
-        column[0] ^ column[1] ^ gmul(column[2], 2) ^ gmul(column[3], 3),
-        gmul(column[0], 3) ^ column[1] ^ column[2] ^ gmul(column[3], 2),
-    ]
+    """Mix one column for the MixColumns transformation."""
+    temp = column.copy()
+    column[0] = gmul(temp[0], 2) ^ gmul(temp[1], 3) ^ temp[2] ^ temp[3]
+    column[1] = temp[0] ^ gmul(temp[1], 2) ^ gmul(temp[2], 3) ^ temp[3]
+    column[2] = temp[0] ^ temp[1] ^ gmul(temp[2], 2) ^ gmul(temp[3], 3)
+    column[3] = gmul(temp[0], 3) ^ temp[1] ^ temp[2] ^ gmul(temp[3], 2)
+    return column
 
 def mix_columns(state):
+    """Perform the MixColumns transformation."""
     for i in range(4):
-        state[i] = mix_single_column(state[i])
+        column = [state[0][i], state[1][i], state[2][i], state[3][i]]
+        mixed_column = mix_single_column(column)
+        for j in range(4):
+            state[j][i] = mixed_column[j]
     return state
 
-# Function AddRoundKey (adding a round key to the state)
 def add_round_key(state, key_schedule, round_key_index):
+    """Add the round key to the state."""
     for i in range(4):
         for j in range(4):
-            state[i][j] ^= key_schedule[round_key_index + i][j]
+            state[i][j] ^= key_schedule[round_key_index + j][i]
     return state
 
-# Function to rotate a word (4 bytes)
 def rot_word(word):
+    """Rotate a word (4 bytes) left by one byte."""
     return word[1:] + word[:1]
 
-# Function to apply the S-box substitution to a word
 def sub_word(word):
-    return [S_BOX[(byte >> 4) & 0x0F][byte & 0x0F] for byte in word]
+    """Apply the S-box substitution to a word (4 bytes)."""
+    return [S_BOX[byte >> 4][byte & 0x0F] for byte in word]
 
-# Key expansion function with correct implementation
 def key_expansion(key):
-    key_schedule = [[key[i * 4 + j] for j in range(4)] for i in range(4)]
+    """Expand the cipher key into the key schedule."""
+    key_symbols = [k for k in key]
+    key_schedule = []
+    for i in range(4):
+        key_schedule.append(key_symbols[4*i:4*(i+1)])
 
     for i in range(4, 44):
-        temp = key_schedule[i - 1].copy()
+        temp = key_schedule[i - 1][:]
         if i % 4 == 0:
             temp = sub_word(rot_word(temp))
             temp[0] ^= RCON[i // 4 - 1][0]
-        key_schedule.append([key_schedule[i - 4][j] ^ temp[j] for j in range(4)])
-
+        word = [key_schedule[i - 4][j] ^ temp[j] for j in range(4)]
+        key_schedule.append(word)
     return key_schedule
 
-# AES Encryption function
 def aes_encrypt(plaintext, key):
-    state = [list(plaintext[i:i + 4]) for i in range(0, 16, 4)]
+    """Encrypt a single block of plaintext using AES."""
+    state = [[plaintext[4 * i + j] for j in range(4)] for i in range(4)]
     key_schedule = key_expansion(key)
 
-    # Initial AddRoundKey
     state = add_round_key(state, key_schedule, 0)
 
-    # 9 Main Rounds
-    for i in range(1, 10):
+    for round in range(1, 10):
         state = sub_bytes(state)
         state = shift_rows(state)
         state = mix_columns(state)
-        state = add_round_key(state, key_schedule, i * 4)
+        state = add_round_key(state, key_schedule, round * 4)
 
-    # Final Round (without MixColumns)
     state = sub_bytes(state)
     state = shift_rows(state)
     state = add_round_key(state, key_schedule, 40)
 
-    # Convert state back to bytes
-    return bytes([state[i][j] for i in range(4) for j in range(4)])
+    ciphertext = bytearray(16)
+    for i in range(4):
+        for j in range(4):
+            ciphertext[4 * i + j] = state[i][j]
+    return bytes(ciphertext)
 
-# Function to encrypt a single file with AES
 def aes_encrypt_file(input_file, output_file, key):
+    """Encrypt a file using AES encryption."""
     with open(input_file, 'rb') as f:
         plaintext = f.read()
 
@@ -136,25 +150,27 @@ def aes_encrypt_file(input_file, output_file, key):
         encrypted_block = aes_encrypt(block, key)
         ciphertext += encrypted_block
 
-        print(f'Plaintext Block: {block}')
-        print(f'Encrypted Block: {encrypted_block.hex()}')
+    # Write ciphertext in binary mode
+    with open(output_file, 'wb') as f:
+        f.write(ciphertext)
 
-    # Write ciphertext as hex to file
-    with open(output_file, 'w') as f:
-        f.write(ciphertext.hex())  # Writing as hex string
-
-# Function to encrypt all .txt files in a directory, excluding already encrypted files
 def encrypt_files_in_directory(input_path, output_path, key):
+    """Encrypt files with specified extensions in a directory."""
     # Create output directory if it doesn't exist
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # List all .txt files in the input directory
+    # Define the file extensions to encrypt
+    file_extensions = ['.txt', '.jpg', '.jpeg', '.png', '.pdf']
+
+    # List all files in the input directory
     for filename in os.listdir(input_path):
-        # Skip files that end with '_E.txt' to avoid re-encryption
-        if filename.endswith('.txt') and not filename.endswith('_E.txt'):
+        # Get file extension
+        file_ext = os.path.splitext(filename)[1].lower()
+        # Check if the file has one of the specified extensions and is not already encrypted
+        if file_ext in file_extensions and not filename.endswith('_E' + file_ext):
             input_file = os.path.join(input_path, filename)
-            output_file = os.path.join(output_path, filename[:-4] + '_E.txt')
+            output_file = os.path.join(output_path, filename[:-len(file_ext)] + '_E' + file_ext)
 
             # Check if the encrypted file already exists to prevent overwriting
             if os.path.exists(output_file):
@@ -164,13 +180,11 @@ def encrypt_files_in_directory(input_path, output_path, key):
             # Encrypt each file
             aes_encrypt_file(input_file, output_file, key)
             print(f'File {filename} encrypted and saved as {output_file}')
-        else:
-            print(f"Skipping file {filename} (either not a .txt file or already encrypted).")
 
 if __name__ == "__main__":
     # Define your input and output directories
-    input_path = "C:\\Users\\xapa\\Documents\\test"
-    output_path = "C:\\Users\\xapa\\Documents\\test\\enc"
+    input_path = "C:\\Users\\nis\\OneDrive\\Bureau\\AES"
+    output_path = "C:\\Users\\nis\\OneDrive\\Bureau\\AES"
 
     # Define your AES key (16 bytes for AES-128)
     key_input = "qwertyuiopqwerty"
