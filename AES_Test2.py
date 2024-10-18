@@ -150,9 +150,16 @@ def aes_encrypt_file(input_file, output_file, key):
         encrypted_block = aes_encrypt(block, key)
         ciphertext += encrypted_block
 
-    # Write ciphertext in binary mode
-    with open(output_file, 'wb') as f:
-        f.write(ciphertext)
+    # Determine if the file is a text file
+    file_ext = os.path.splitext(input_file)[1].lower()
+    if file_ext == '.txt':
+        # Write ciphertext as hex string for text files
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(ciphertext.hex())  # Writing as hex string
+    else:
+        # Write ciphertext in binary mode for binary files
+        with open(output_file, 'wb') as f:
+            f.write(ciphertext)
 
 def encrypt_files_in_directory(input_path, output_path, key):
     """Encrypt files with specified extensions in a directory."""
@@ -183,8 +190,8 @@ def encrypt_files_in_directory(input_path, output_path, key):
 
 if __name__ == "__main__":
     # Define your input and output directories
-    input_path = "C:\\Users\\nis\\OneDrive\\Bureau\\AES"
-    output_path = "C:\\Users\\nis\\OneDrive\\Bureau\\AES"
+    input_path = "C:\\Users\\xapa\\Documents\\test"
+    output_path = "C:\\Users\\xapa\\Documents\\test\\enc"
 
     # Define your AES key (16 bytes for AES-128)
     key_input = "qwertyuiopqwerty"

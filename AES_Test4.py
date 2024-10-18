@@ -40,7 +40,7 @@ S_BOX = [
     [0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16]
 ]
 
-# Rcon used for Key Expansion (same as in encryption)
+# Rcon used for KeyExpansion
 RCON = [
     [0x01, 0x00, 0x00, 0x00],
     [0x02, 0x00, 0x00, 0x00],
@@ -53,6 +53,7 @@ RCON = [
     [0x1b, 0x00, 0x00, 0x00],
     [0x36, 0x00, 0x00, 0x00]
 ]
+
 
 def gmul(a, b):
     """Galois Field (256) Multiplication of two Bytes."""
@@ -67,12 +68,14 @@ def gmul(a, b):
         b >>= 1
     return p
 
+
 def inv_shift_rows(state):
     """Perform the Inverse ShiftRows transformation."""
     state[1] = state[1][-1:] + state[1][:-1]  # Right rotate by 1
     state[2] = state[2][-2:] + state[2][:-2]  # Right rotate by 2
     state[3] = state[3][-3:] + state[3][:-3]  # Right rotate by 3
     return state
+
 
 def inv_sub_bytes(state):
     """Apply the inverse S-box substitution to the state."""
@@ -82,14 +85,16 @@ def inv_sub_bytes(state):
             state[i][j] = INV_S_BOX[byte >> 4][byte & 0x0F]
     return state
 
+
 def inv_mix_single_column(column):
     """Mix one column for the Inverse MixColumns transformation."""
-    temp = column.copy()
-    column[0] = gmul(temp[0], 0x0e) ^ gmul(temp[1], 0x0b) ^ gmul(temp[2], 0x0d) ^ gmul(temp[3], 0x09)
-    column[1] = gmul(temp[0], 0x09) ^ gmul(temp[1], 0x0e) ^ gmul(temp[2], 0x0b) ^ gmul(temp[3], 0x0d)
-    column[2] = gmul(temp[0], 0x0d) ^ gmul(temp[1], 0x09) ^ gmul(temp[2], 0x0e) ^ gmul(temp[3], 0x0b)
-    column[3] = gmul(temp[0], 0x0b) ^ gmul(temp[1], 0x0d) ^ gmul(temp[2], 0x09) ^ gmul(temp[3], 0x0e)
-    return column
+    return [
+        gmul(column[0], 0x0e) ^ gmul(column[1], 0x0b) ^ gmul(column[2], 0x0d) ^ gmul(column[3], 0x09),
+        gmul(column[0], 0x09) ^ gmul(column[1], 0x0e) ^ gmul(column[2], 0x0b) ^ gmul(column[3], 0x0d),
+        gmul(column[0], 0x0d) ^ gmul(column[1], 0x09) ^ gmul(column[2], 0x0e) ^ gmul(column[3], 0x0b),
+        gmul(column[0], 0x0b) ^ gmul(column[1], 0x0d) ^ gmul(column[2], 0x09) ^ gmul(column[3], 0x0e)
+    ]
+
 
 def inv_mix_columns(state):
     """Perform the Inverse MixColumns transformation."""
@@ -100,20 +105,31 @@ def inv_mix_columns(state):
             state[j][i] = mixed_column[j]
     return state
 
+
+def add_round_key(state, key_schedule, round_key_index):
+    """Add the round key to the state."""
+    for i in range(4):
+        for j in range(4):
+            state[i][j] ^= key_schedule[round_key_index + j][i]
+    return state
+
+
 def rot_word(word):
     """Rotate a word (4 bytes) left by one byte."""
     return word[1:] + word[:1]
 
+
 def sub_word(word):
     """Apply the S-box substitution to a word (4 bytes)."""
     return [S_BOX[byte >> 4][byte & 0x0F] for byte in word]
+
 
 def key_expansion(key):
     """Expand the cipher key into the key schedule."""
     key_symbols = [k for k in key]
     key_schedule = []
     for i in range(4):
-        key_schedule.append(key_symbols[4*i:4*(i+1)])
+        key_schedule.append(key_symbols[4 * i:4 * (i + 1)])
 
     for i in range(4, 44):
         temp = key_schedule[i - 1][:]
@@ -124,47 +140,63 @@ def key_expansion(key):
         key_schedule.append(word)
     return key_schedule
 
-def add_round_key(state, key_schedule, round_key_index):
-    """Add the round key to the state."""
-    for i in range(4):
-        for j in range(4):
-            state[i][j] ^= key_schedule[round_key_index + j][i]
-    return state
 
 def aes_decrypt(ciphertext, key):
     """Decrypt a single block of ciphertext using AES."""
     state = [[ciphertext[4 * i + j] for j in range(4)] for i in range(4)]
     key_schedule = key_expansion(key)
 
+    # Initial AddRoundKey with the last round key
     state = add_round_key(state, key_schedule, 40)
 
+    # 9 Inverse Rounds
     for round in range(9, 0, -1):
         state = inv_shift_rows(state)
         state = inv_sub_bytes(state)
         state = add_round_key(state, key_schedule, round * 4)
         state = inv_mix_columns(state)
 
+    # Final Inverse Round (without InvMixColumns)
     state = inv_shift_rows(state)
     state = inv_sub_bytes(state)
     state = add_round_key(state, key_schedule, 0)
 
+    # Convert state back to bytes
     plaintext = bytearray(16)
     for i in range(4):
         for j in range(4):
             plaintext[4 * i + j] = state[i][j]
     return bytes(plaintext)
 
+
 def aes_decrypt_file(input_file, output_file, key):
     """Decrypt a file using AES decryption."""
-    with open(input_file, 'rb') as f:
-        ciphertext = f.read()
+    file_ext = os.path.splitext(input_file)[1].lower()
+
+    # Determine if the file is a hex-encoded .txt file
+    is_text_file = file_ext == '.txt'
+
+    if is_text_file:
+        # Read ciphertext as hex string
+        with open(input_file, 'r', encoding='utf-8') as f:
+            ciphertext_hex = f.read().strip()
+        try:
+            ciphertext = bytes.fromhex(ciphertext_hex)
+        except ValueError:
+            raise ValueError(f"File {input_file} contains invalid hex data.")
+    else:
+        # Read ciphertext as binary data
+        with open(input_file, 'rb') as f:
+            ciphertext = f.read()
+
+    # Ensure ciphertext length is a multiple of 16 bytes
+    if len(ciphertext) % 16 != 0:
+        raise ValueError("Ciphertext length is not a multiple of 16 bytes.")
 
     # Decryption
     plaintext = b''
     for i in range(0, len(ciphertext), 16):
         block = ciphertext[i:i + 16]
-        if len(block) < 16:
-            raise ValueError("Ciphertext block is incomplete.")
         decrypted_block = aes_decrypt(block, key)
         plaintext += decrypted_block
 
@@ -175,9 +207,19 @@ def aes_decrypt_file(input_file, output_file, key):
     else:
         raise ValueError("Invalid padding detected or incorrect decryption key.")
 
-    # Write plaintext in binary mode
-    with open(output_file, 'wb') as f:
-        f.write(plaintext)
+    if is_text_file:
+        # Write plaintext as UTF-8 encoded text
+        try:
+            plaintext_str = plaintext.decode('utf-8')
+        except UnicodeDecodeError:
+            raise ValueError(f"Decrypted data in {input_file} is not valid UTF-8.")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(plaintext_str)
+    else:
+        # Write plaintext as binary data
+        with open(output_file, 'wb') as f:
+            f.write(plaintext)
+
 
 def decrypt_files_in_directory(input_path, output_path, key):
     """Decrypt files with specified extensions in a directory."""
@@ -195,6 +237,8 @@ def decrypt_files_in_directory(input_path, output_path, key):
         # Check if the file has one of the specified extensions and ends with '_E' before the extension
         if file_ext in file_extensions and filename.endswith('_E' + file_ext):
             input_file = os.path.join(input_path, filename)
+            # Define the decrypted file name
+            # Example: 'document_E.txt' -> 'document_D.txt'
             output_file = os.path.join(output_path, filename[:-len(file_ext) - 2] + '_D' + file_ext)
 
             # Check if the decrypted file already exists to prevent overwriting
@@ -208,6 +252,7 @@ def decrypt_files_in_directory(input_path, output_path, key):
                 print(f'File {filename} decrypted and saved as {output_file}')
             except ValueError as e:
                 print(f'Error decrypting {filename}: {e}')
+
 
 if __name__ == "__main__":
     # Define your input and output directories
